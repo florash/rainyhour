@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rainy Hour</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@200;300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --text: rgba(240,245,255,0.92);
+    --text-dim: rgba(200,215,235,0.5);
+    --accent: rgba(180,210,255,0.85);
+    --border: rgba(200,220,255,0.18);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#0a0f1a; font-family:'Jost',sans-serif; cursor:none; }
+
+  /* ── Background photos ── */
+  .bg-layer {
+    position: fixed; inset: 0; z-index: 0;
+    background-size: cover; background-position: center;
+    opacity: 0; transition: opacity 1.8s ease;
+    transform: scale(1.04);
+    transition: opacity 1.8s ease, transform 8s ease;
+  }
+  .bg-layer.active { opacity: 1; transform: scale(1); }
+  /* Dark overlay so text stays readable */
+  .bg-overlay {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      rgba(4,8,18,0.55) 0%,
+      rgba(4,8,18,0.30) 40%,
+      rgba(4,8,18,0.50) 70%,
+      rgba(4,8,18,0.75) 100%
+    );
+  }
+
+  /* ── Rain canvas ── */
+  #rainCanvas  { position:fixed; inset:0; z-index:2; pointer-events:none; }
+  #rippleCanvas{ position:fixed; bottom:0; left:0; right:0; width:100%; height:120px; z-index:3; pointer-events:none; opacity:0.6; }
+
+  /* ── Lightning ── */
+  .lightning-overlay { position:fixed; inset:0; z-index:4; pointer-events:none; background:rgba(220,235,255,0); transition:background 0.06s; }
+  .lightning-overlay.flash { background:rgba(220,235,255,0.22); }
+
+  /* ── Bird dots ── */
+  .bird-dot { position:fixed; z-index:5; pointer-events:none; width:5px; height:2px; border-radius:50%; background:rgba(220,235,255,0.5); opacity:0; animation:birdFly 9s linear forwards; }
+  @keyframes birdFly { 0%{opacity:0;transform:translate(0,0)} 10%{opacity:0.6} 90%{opacity:0.25} 100%{opacity:0;transform:translate(var(--dx),var(--dy))} }
+
+  /* ── Hero text ── */
+  .panel {
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    z-index:10; text-align:center; pointer-events:none; user-select:none;
+  }
+  .title {
+    font-family:'Cormorant Garamond',serif;
+    font-size: clamp(4rem,10vw,8rem);
+    font-weight: 300;
+    font-style: italic;
+    color: var(--text);
+    letter-spacing: 0.04em;
+    line-height: 1;
+    text-shadow: 0 2px 40px rgba(80,140,220,0.35), 0 0 80px rgba(60,120,200,0.2);
+    animation: titleBreath 7s ease-in-out infinite;
+  }
+  .slogan {
+    margin-top: 1em;
+    font-family:'Jost',sans-serif;
+    font-weight: 200;
+    font-size: clamp(0.65rem,1.4vw,0.85rem);
+    letter-spacing: 0.45em;
+    color: var(--text-dim);
+    text-transform: lowercase;
+  }
+  @keyframes titleBreath { 0%,100%{opacity:0.88} 50%{opacity:1} }
+
+  /* ── Background picker ── */
+  .bg-picker {
+    position: fixed; top: 28px; left: 32px; z-index: 20;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .bg-thumb {
+    width: 36px; height: 26px; border-radius: 3px; cursor: pointer;
+    background-size: cover; background-position: center;
+    opacity: 0.45; transition: opacity 0.3s, transform 0.3s, box-shadow 0.3s;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .bg-thumb:hover { opacity: 0.75; transform: scale(1.08); }
+  .bg-thumb.active { opacity: 1; box-shadow: 0 0 0 1.5px rgba(180,210,255,0.7); }
+  .bg-label {
+    font-size: 0.5rem; letter-spacing: 0.4em; color: var(--text-dim);
+    text-transform: uppercase; font-family:'Jost',sans-serif; margin-left:4px;
+  }
+
+  /* ── Clock ── */
+  .time-display {
+    position:fixed; top:28px; right:32px; z-index:20;
+    font-family:'Jost',sans-serif; font-weight:200;
+    font-size:0.72rem; letter-spacing:0.3em; color:var(--text-dim);
+    text-align:right; pointer-events:none; line-height:1.8;
+  }
+
+  /* ── Quote ── */
+  .quote {
+    position:fixed; bottom:185px; left:32px; z-index:10;
+    font-family:'Cormorant Garamond',serif; font-style:italic;
+    font-size:clamp(0.8rem,1.3vw,1rem); font-weight:300;
+    color:rgba(200,220,250,0.32); line-height:2;
+    pointer-events:none; max-width:200px; transition:opacity 3s;
+  }
+
+  /* ── Controls ── */
+  .controls {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    z-index:20; display:flex; flex-direction:column; align-items:center;
+    gap:13px; pointer-events:all;
+  }
+  .sliders { display:flex; gap:22px; align-items:flex-end; flex-wrap:wrap; justify-content:center; }
+  .slider-group { display:flex; flex-direction:column; align-items:center; gap:7px; }
+  .slider-label { font-family:'Jost',sans-serif; font-weight:300; font-size:0.55rem; letter-spacing:0.4em; color:var(--text-dim); text-transform:uppercase; }
+  input[type=range] { -webkit-appearance:none; appearance:none; width:86px; height:1.5px; background:rgba(180,210,255,0.2); outline:none; border-radius:2px; cursor:pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:11px; height:11px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px rgba(150,190,255,0.5); transition:transform 0.2s; }
+  input[type=range]:hover::-webkit-slider-thumb { transform:scale(1.3); }
+
+  .btn-row { display:flex; gap:9px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  .btn {
+    font-family:'Jost',sans-serif; font-weight:300;
+    font-size:0.58rem; letter-spacing:0.4em; color:var(--text-dim);
+    background:transparent; border:1px solid var(--border);
+    padding:7px 16px; cursor:pointer; border-radius:2px;
+    transition:all 0.3s; text-transform:uppercase; white-space:nowrap;
+  }
+  .btn:hover { color:var(--accent); border-color:rgba(180,210,255,0.35); }
+  .btn.active { color:var(--accent); border-color:rgba(180,210,255,0.55); box-shadow:0 0 20px rgba(100,160,255,0.15); }
+
+  .section-label { font-size:0.48rem; letter-spacing:0.55em; color:rgba(180,210,255,0.22); text-transform:uppercase; font-family:'Jost',sans-serif; }
+
+  /* ── Bird tracks ── */
+  .bird-tracks { display:flex; gap:26px; flex-wrap:wrap; justify-content:center; align-items:flex-end; }
+  .track { display:flex; flex-direction:column; align-items:center; gap:7px; }
+  .track-label { font-size:0.5rem; letter-spacing:0.18em; color:rgba(180,210,255,0.35); font-family:'Jost',sans-serif; text-align:center; line-height:1.6; font-weight:300; }
+  .track-btn {
+    font-size:0.55rem; letter-spacing:0.3em; color:var(--text-dim);
+    background:transparent; border:1px solid var(--border);
+    padding:5px 13px; cursor:pointer; border-radius:2px;
+    transition:all 0.3s; font-family:'Jost',sans-serif; font-weight:300;
+    display:flex; align-items:center; gap:6px; text-transform:uppercase; white-space:nowrap;
+  }
+  .track-btn:hover { color:var(--accent); border-color:rgba(180,210,255,0.35); }
+  .track-btn.active { color:var(--accent); border-color:rgba(180,210,255,0.55); background:rgba(100,160,255,0.06); }
+  .track-btn .dot { width:4px; height:4px; border-radius:50%; background:currentColor; opacity:0.35; flex-shrink:0; }
+  .track-btn.active .dot { opacity:1; animation:dotPulse 1.4s ease-in-out infinite; }
+  @keyframes dotPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.7)} }
+
+  /* waveform bars */
+  .wave-bars { display:flex; gap:2px; align-items:flex-end; height:13px; opacity:0; transition:opacity 0.6s; }
+  .wave-bars.on { opacity:1; }
+  .bar { width:3px; background:var(--accent); border-radius:1px; animation:barAnim 0.9s ease-in-out infinite alternate; opacity:0.6; }
+  .bar:nth-child(1){height:4px;animation-delay:0s}
+  .bar:nth-child(2){height:9px;animation-delay:0.13s}
+  .bar:nth-child(3){height:13px;animation-delay:0.26s}
+  .bar:nth-child(4){height:7px;animation-delay:0.39s}
+  .bar:nth-child(5){height:11px;animation-delay:0.19s}
+  @keyframes barAnim { from{transform:scaleY(0.25)} to{transform:scaleY(1)} }
+
+  .intensity-badge { font-size:0.52rem; letter-spacing:0.4em; color:rgba(180,210,255,0.28); text-transform:uppercase; font-family:'Jost',sans-serif; font-weight:300; }
+
+  .hint { position:fixed; bottom:24px; right:28px; z-index:20; font-size:0.47rem; letter-spacing:0.3em; color:rgba(180,210,255,0.18); font-family:'Jost',sans-serif; font-weight:300; line-height:2; text-align:right; pointer-events:none; }
+  .cursor { position:fixed; width:5px; height:5px; background:rgba(180,210,255,0.5); border-radius:50%; pointer-events:none; z-index:999; transform:translate(-50%,-50%); box-shadow:0 0 8px rgba(150,190,255,0.3); }
+</style>
+</head>
+<body>
+
+<!-- Background layers -->
+<div class="bg-layer active" id="bg0" style="background-image:url('bg1.jpg')"></div>
+<div class="bg-layer"        id="bg1" style="background-image:url('bg2.jpg')"></div>
+<div class="bg-layer"        id="bg2" style="background-image:url('bg3.jpg')"></div>
+<div class="bg-overlay"></div>
+
+<canvas id="rainCanvas"></canvas>
+<canvas id="rippleCanvas"></canvas>
+<div class="lightning-overlay" id="lightning"></div>
+
+<!-- Hero -->
+<div class="panel">
+  <div class="title">rainy hour</div>
+  <div class="slogan">time slows down when it rains ☁️</div>
+</div>
+
+<!-- Background picker -->
+<div class="bg-picker">
+  <div class="bg-thumb active" id="thumb0" style="background-image:url('bg1.jpg')" onclick="switchBg(0)" title="Rain field"></div>
+  <div class="bg-thumb"        id="thumb1" style="background-image:url('bg2.jpg')" onclick="switchBg(1)" title="Rainy road"></div>
+  <div class="bg-thumb"        id="thumb2" style="background-image:url('bg3.jpg')" onclick="switchBg(2)" title="Rain street"></div>
+  <span class="bg-label">scene</span>
+</div>
+
+<!-- Clock -->
+<div class="time-display" id="clock"></div>
+
+<!-- Quote -->
+<div class="quote" id="quote"></div>
+
+<!-- Controls -->
+<div class="controls">
+  <div class="sliders">
+    <div class="slider-group"><div class="slider-label">Rain</div><input type="range" id="intensitySlider" min="50" max="800" value="300"></div>
+    <div class="slider-group"><div class="slider-label">Wind</div><input type="range" id="windSlider" min="-3" max="3" value="0.5" step="0.1"></div>
+    <div class="slider-group"><div class="slider-label">Volume</div><input type="range" id="volumeSlider" min="0" max="1" value="0.6" step="0.01"></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn" id="soundBtn">♩ rain</button>
+    <button class="btn" id="thunderBtn">⚡ thunder</button>
+  </div>
+
+  <div class="section-label">soundscapes</div>
+
+  <div class="bird-tracks">
+    <div class="track">
+      <button class="track-btn" id="btn-australia" onclick="toggleTrack('australia')"><span class="dot"></span> 🦅 Queensland Dawn</button>
+      <div class="wave-bars" id="wave-australia"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+      <div class="slider-group"><input type="range" id="vol-australia" min="0" max="1" value="0.7" step="0.01" style="width:78px"><div class="slider-label" style="font-size:0.47rem">level</div></div>
+      <div class="track-label">kookaburra · magpie</div>
+    </div>
+    <div class="track">
+      <button class="track-btn" id="btn-evening" onclick="toggleTrack('evening')"><span class="dot"></span> 🌿 Evening Choir</button>
+      <div class="wave-bars" id="wave-evening"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+      <div class="slider-group"><input type="range" id="vol-evening" min="0" max="1" value="0.65" step="0.01" style="width:78px"><div class="slider-label" style="font-size:0.47rem">level</div></div>
+      <div class="track-label">dusk birds · 6pm</div>
+    </div>
+    <div class="track">
+      <button class="track-btn" id="btn-forest" onclick="toggleTrack('forest')"><span class="dot"></span> 🌲 Forest</button>
+      <div class="wave-bars" id="wave-forest"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+      <div class="slider-group"><input type="range" id="vol-forest" min="0" max="1" value="0.65" step="0.01" style="width:78px"><div class="slider-label" style="font-size:0.47rem">level</div></div>
+      <div class="track-label">deep nature</div>
+    </div>
+  </div>
+
+  <div class="intensity-badge" id="intensityLabel">moderate rain</div>
+</div>
+
+<div class="hint">space · rain &nbsp;|&nbsp; T · thunder &nbsp;|&nbsp; B · dawn &nbsp;|&nbsp; N · evening &nbsp;|&nbsp; M · forest &nbsp;|&nbsp; 1-3 · scene</div>
+<div class="cursor" id="cursor"></div>
+
+<script>
+// ── Cursor ───────────────────────────────
+const cursor = document.getElementById('cursor');
+document.addEventListener('mousemove', e => { cursor.style.left=e.clientX+'px'; cursor.style.top=e.clientY+'px'; });
+
+// ── Background switcher ──────────────────
+let currentBg = 0;
+function switchBg(idx) {
+  document.getElementById('bg'+currentBg).classList.remove('active');
+  document.getElementById('thumb'+currentBg).classList.remove('active');
+  currentBg = idx;
+  document.getElementById('bg'+currentBg).classList.add('active');
+  document.getElementById('thumb'+currentBg).classList.add('active');
+}
+// Auto-cycle every 90s if no interaction
+let autoCycle = setInterval(() => switchBg((currentBg+1)%3), 90000);
+document.querySelectorAll('.bg-thumb').forEach(t => t.addEventListener('click', () => { clearInterval(autoCycle); }));
+
+// ── Clock ────────────────────────────────
+const clockEl = document.getElementById('clock');
+function updateClock() {
+  const n = new Date(), h=String(n.getHours()).padStart(2,'0'), m=String(n.getMinutes()).padStart(2,'0'), s=String(n.getSeconds()).padStart(2,'0');
+  const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  clockEl.innerHTML = `${h} : ${m} : ${s}<br><span style="font-size:0.5rem;letter-spacing:0.45em;opacity:0.5">${days[n.getDay()]}</span>`;
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// ── Quotes ───────────────────────────────
+const quotes = [
+  "let it rain\nlet it pour",
+  "the smell of\nearth after rain",
+  "grey skies\nwarm inside",
+  "every raindrop\ntells a story",
+  "stay a while\nand listen",
+  "soft rain\nsofter thoughts",
+  "birds sing\neven in rain",
+];
+const quoteEl = document.getElementById('quote'); let qi = 0;
+function nextQuote() { quoteEl.style.opacity=0; setTimeout(()=>{ quoteEl.textContent=quotes[qi++%quotes.length]; quoteEl.style.opacity=1; }, 2000); }
+nextQuote(); setInterval(nextQuote, 18000);
+
+// ── Rain Canvas ──────────────────────────
+const rainCanvas=document.getElementById('rainCanvas'), ctx=rainCanvas.getContext('2d');
+const rippleCanvas=document.getElementById('rippleCanvas'), rctx=rippleCanvas.getContext('2d');
+let W, H;
+function resize() { W=rainCanvas.width=window.innerWidth; H=rainCanvas.height=window.innerHeight; rippleCanvas.width=window.innerWidth; rippleCanvas.height=120; }
+window.addEventListener('resize', resize); resize();
+let intensity=300, wind=0.5, drops=[], ripples=[];
+class Drop {
+  constructor() { this.reset(true); }
+  reset(i=false) { this.x=Math.random()*W; this.y=i?Math.random()*H:-20; this.len=Math.random()*18+8; this.speed=Math.random()*14+10; this.opacity=Math.random()*0.38+0.12; this.width=Math.random()*0.8+0.3; }
+  update() { this.x+=wind*(this.speed/18); this.y+=this.speed; if(this.y>H+20){spawnRipple(this.x);this.reset();} }
+  draw() { ctx.beginPath(); ctx.moveTo(this.x,this.y); ctx.lineTo(this.x+wind*this.len/18,this.y+this.len); ctx.strokeStyle=`rgba(200,225,255,${this.opacity})`; ctx.lineWidth=this.width; ctx.stroke(); }
+}
+function spawnRipple(x) { if(Math.random()>0.15)return; ripples.push({x,y:110,rx:0,ry:0,life:1}); }
+function drawRipples() { rctx.clearRect(0,0,rippleCanvas.width,rippleCanvas.height); ripples=ripples.filter(r=>r.life>0); for(const r of ripples){r.rx+=1.2;r.ry+=0.3;r.life-=0.025; rctx.beginPath(); rctx.ellipse(r.x,r.y,r.rx,r.ry,0,0,Math.PI*2); rctx.strokeStyle=`rgba(180,215,255,${r.life*0.35})`; rctx.lineWidth=0.8; rctx.stroke();} }
+function syncDrops() { while(drops.length<intensity)drops.push(new Drop()); while(drops.length>intensity)drops.pop(); }
+syncDrops();
+function animate() { ctx.clearRect(0,0,W,H); for(const d of drops){d.update();d.draw();} drawRipples(); requestAnimationFrame(animate); }
+animate();
+
+// ── Sliders ──────────────────────────────
+const labelMap = v => v<100?'drizzle':v<250?'light rain':v<450?'moderate rain':v<650?'heavy rain':'downpour';
+document.getElementById('intensitySlider').addEventListener('input', e => { intensity=parseInt(e.target.value); document.getElementById('intensityLabel').textContent=labelMap(intensity); syncDrops(); if(rainGain)updateRainVol(); });
+document.getElementById('windSlider').addEventListener('input', e => wind=parseFloat(e.target.value));
+document.getElementById('volumeSlider').addEventListener('input', e => { masterVol=parseFloat(e.target.value); if(rainGain)updateRainVol(); for(const k in birdAudio){if(birdAudio[k])birdAudio[k].volume=masterVol*getTrackVol(k);} });
+function getTrackVol(k) { const el=document.getElementById('vol-'+k); return el?parseFloat(el.value):0.7; }
+['australia','evening','forest'].forEach(k => {
+  document.getElementById('vol-'+k).addEventListener('input', e => { if(birdAudio[k])birdAudio[k].volume=masterVol*parseFloat(e.target.value); });
+});
+
+// ── Rain & Thunder (Web Audio) ───────────
+let audioCtx=null, masterVol=0.6;
+function initAudio() { if(audioCtx)return; audioCtx=new(window.AudioContext||window.webkitAudioContext)(); }
+let rainNode=null, rainGain=null;
+function createRainSound() {
+  const sz=audioCtx.sampleRate*2, buf=audioCtx.createBuffer(1,sz,audioCtx.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1);
+  const src=audioCtx.createBufferSource(); src.buffer=buf; src.loop=true;
+  const hp=audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=800;
+  const bp=audioCtx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2000; bp.Q.value=0.5;
+  rainGain=audioCtx.createGain(); updateRainVol();
+  src.connect(hp); hp.connect(bp); bp.connect(rainGain); rainGain.connect(audioCtx.destination); src.start(); return src;
+}
+function updateRainVol() { if(!rainGain)return; rainGain.gain.value=masterVol*(0.3+(intensity/800)*0.7)*0.8; }
+const soundBtn=document.getElementById('soundBtn');
+soundBtn.addEventListener('click', () => { initAudio(); if(rainNode){rainNode.stop();rainNode=null;rainGain=null;soundBtn.textContent='♩ rain';soundBtn.classList.remove('active');}else{rainNode=createRainSound();soundBtn.textContent='♩ rain ·';soundBtn.classList.add('active');} });
+
+let thunderEnabled=false;
+function playThunder() {
+  if(!audioCtx||!thunderEnabled)return;
+  const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*3,audioCtx.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){const e=Math.exp(-i/(audioCtx.sampleRate*0.8));d[i]=(Math.random()*2-1)*e*0.8;}
+  const src=audioCtx.createBufferSource(); src.buffer=buf;
+  const lp=audioCtx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=200;
+  const g=audioCtx.createGain(); g.gain.value=masterVol*1.2;
+  src.connect(lp); lp.connect(g); g.connect(audioCtx.destination); src.start();
+  const fl=document.getElementById('lightning'); fl.classList.add('flash'); setTimeout(()=>fl.classList.remove('flash'),80);
+  if(Math.random()>0.5) setTimeout(()=>{fl.classList.add('flash');setTimeout(()=>fl.classList.remove('flash'),60);},150);
+}
+function scheduleThunder() { if(!thunderEnabled)return; setTimeout(()=>{if(thunderEnabled){playThunder();scheduleThunder();}},8000+Math.random()*20000); }
+const thunderBtn=document.getElementById('thunderBtn');
+thunderBtn.addEventListener('click', () => { initAudio(); thunderEnabled=!thunderEnabled; thunderBtn.classList.toggle('active',thunderEnabled); thunderBtn.textContent=thunderEnabled?'⚡ thunder ·':'⚡ thunder'; if(thunderEnabled){scheduleThunder();setTimeout(playThunder,1800);} });
+
+// ── Bird Audio ───────────────────────────
+const BIRD_FILES = { australia:'birds-australia.mp3', evening:'birds-evening.mp3', forest:'birds-forest.mp3' };
+const birdAudio = {}, trackActive = {};
+function toggleTrack(key) {
+  const btn=document.getElementById('btn-'+key), wave=document.getElementById('wave-'+key);
+  if(trackActive[key]) {
+    trackActive[key]=false;
+    if(birdAudio[key]) fadeAudio(birdAudio[key], birdAudio[key].volume, 0, 1500, ()=>{birdAudio[key].pause(); birdAudio[key].currentTime=0;});
+    btn.classList.remove('active'); wave.classList.remove('on');
+  } else {
+    trackActive[key]=true; btn.classList.add('active'); wave.classList.add('on');
+    if(!birdAudio[key]) { const a=new Audio(BIRD_FILES[key]); a.loop=true; a.volume=0; birdAudio[key]=a; }
+    birdAudio[key].play().then(()=>fadeAudio(birdAudio[key],0,masterVol*getTrackVol(key),2200)).catch(()=>{trackActive[key]=false;btn.classList.remove('active');wave.classList.remove('on');});
+  }
+}
+function fadeAudio(audio, from, to, ms, done) {
+  const steps=40, int=ms/steps, step=(to-from)/steps; let cur=from, n=0;
+  audio.volume=Math.max(0,Math.min(1,from));
+  const id=setInterval(()=>{ cur+=step; n++; audio.volume=Math.max(0,Math.min(1,cur)); if(n>=steps){clearInterval(id);audio.volume=Math.max(0,Math.min(1,to));if(done)done();} },int);
+}
+
+// Bird dot floaters
+setInterval(()=>{
+  if(Object.values(trackActive).some(Boolean)) { spawnBirdDot(); if(Math.random()>0.55)setTimeout(spawnBirdDot,400+Math.random()*500); }
+},4500+Math.random()*2500);
+function spawnBirdDot() {
+  const el=document.createElement('div'); el.className='bird-dot';
+  const sx=80+Math.random()*(window.innerWidth-160), sy=40+Math.random()*(window.innerHeight*0.4);
+  const dx=(Math.random()>0.5?1:-1)*(120+Math.random()*200), dy=-(10+Math.random()*50);
+  el.style.cssText=`left:${sx}px;top:${sy}px;--dx:${dx}px;--dy:${dy}px;animation-duration:${8+Math.random()*5}s;`;
+  document.body.appendChild(el); setTimeout(()=>el.remove(),14000);
+}
+
+// ── Keyboard ─────────────────────────────
+document.addEventListener('keydown', e => {
+  if(e.key===' '){e.preventDefault();soundBtn.click();}
+  if(e.key==='t'||e.key==='T') thunderBtn.click();
+  if(e.key==='b'||e.key==='B') toggleTrack('australia');
+  if(e.key==='n'||e.key==='N') toggleTrack('evening');
+  if(e.key==='m'||e.key==='M') toggleTrack('forest');
+  if(e.key==='1') switchBg(0);
+  if(e.key==='2') switchBg(1);
+  if(e.key==='3') switchBg(2);
+});
+</script>
+</body>
+</html>
